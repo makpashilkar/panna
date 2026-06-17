@@ -21,8 +21,7 @@ async function testExport(page, format) {
   if (format === "pngs") {
     await page.getByRole("button", { name: "PNGs", exact: true }).click();
   }
-  const exportLabel = format === "zip" ? "Export ZIP" : "Export PNGs";
-  const exportBtn = page.getByRole("button", { name: exportLabel });
+  const exportBtn = page.getByRole("button", { name: "Export", exact: true });
   await exportBtn.click();
   await exportBtn.waitFor({ hasText: "Downloaded!", timeout: 60000 });
   console.log(`${format.toUpperCase()} export passed`);

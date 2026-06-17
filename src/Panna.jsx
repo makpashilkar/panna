@@ -198,7 +198,6 @@ export default function Panna() {
   };
 
   const atMaxSlides = slides.length >= MAX_SLIDES;
-  const exportLabel = exportFormat === "zip" ? "Export ZIP" : "Export PNGs";
 
   return (
     <div
@@ -246,7 +245,7 @@ export default function Panna() {
             gap: 8,
           }}
         >
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <span
               style={{
                 fontSize: 18,
@@ -258,7 +257,7 @@ export default function Panna() {
             >
               panna
             </span>
-            <span style={{ fontSize: 11, color: ui.textDim, marginLeft: 8 }}>carousel maker</span>
+            <span style={{ fontSize: 11, color: ui.textDim }}>carousel maker</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button
@@ -305,9 +304,13 @@ export default function Panna() {
                 cursor: exporting ? "not-allowed" : "pointer",
                 opacity: exporting ? 0.7 : 1,
                 whiteSpace: "nowrap",
+                minWidth: 120,
+                textAlign: "center",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
-              {exporting || exportMsg ? exportMsg || "Exporting..." : exportLabel}
+              {exporting || exportMsg ? exportMsg || "Exporting..." : "Export"}
             </button>
           </div>
         </div>
