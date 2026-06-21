@@ -1,9 +1,12 @@
-export default function MobileBottomSheet({ ui, title, onClose, children }) {
+export default function MobileBottomSheet({ ui, title, onClose, children, tall = false, bodyClassName = "" }) {
+  const sheetClass = tall ? "panna-bottom-sheet panna-bottom-sheet-tall" : "panna-bottom-sheet";
+  const bodyClass = bodyClassName ? `panna-sheet-body ${bodyClassName}` : "panna-sheet-body";
+
   return (
     <>
       <div className="panna-sheet-backdrop" onClick={onClose} aria-hidden="true" />
       <div
-        className="panna-bottom-sheet"
+        className={sheetClass}
         style={{ background: ui.panelBg, borderTop: `1px solid ${ui.border}` }}
         role="dialog"
         aria-label={title}
@@ -49,7 +52,7 @@ export default function MobileBottomSheet({ ui, title, onClose, children }) {
             ×
           </button>
         </div>
-        <div className="panna-sheet-body">{children}</div>
+        <div className={bodyClass}>{children}</div>
       </div>
     </>
   );

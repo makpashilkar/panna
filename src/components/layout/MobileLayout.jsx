@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import AppHeader from "../AppHeader.jsx";
 import ControlsPanel from "../ControlsPanel.jsx";
-import SlideThread from "../SlideThread.jsx";
+import MobileSlideEditor from "../MobileSlideEditor.jsx";
 import PreviewPanel from "../PreviewPanel.jsx";
 import MobileToolbar from "../MobileToolbar.jsx";
 import MobileBottomSheet from "../MobileBottomSheet.jsx";
@@ -47,8 +47,14 @@ export default function MobileLayout({
         </MobileBottomSheet>
       )}
       {mobileSheet === "slides" && (
-        <MobileBottomSheet ui={ui} title="Edit slides" onClose={() => onToggleSheet("slides")}>
-          <SlideThread {...slideThreadProps} fillHeight />
+        <MobileBottomSheet
+          ui={ui}
+          title="Edit slides"
+          tall
+          bodyClassName="panna-sheet-body-fill"
+          onClose={() => onToggleSheet("slides")}
+        >
+          <MobileSlideEditor {...slideThreadProps} />
         </MobileBottomSheet>
       )}
     </>

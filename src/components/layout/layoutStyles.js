@@ -12,6 +12,7 @@ export const LAYOUT_STYLES = `
       flex-direction: column;
       height: 100dvh;
       min-height: 100dvh;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
     .panna-preview-panel {
       flex: 1;
@@ -25,6 +26,7 @@ export const LAYOUT_STYLES = `
     }
     .panna-mobile-toolbar {
       flex-shrink: 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
     .panna-sheet-backdrop {
       position: fixed;
@@ -43,17 +45,39 @@ export const LAYOUT_STYLES = `
       flex-direction: column;
       border-radius: 16px 16px 0 0;
       overflow: hidden;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .panna-bottom-sheet-tall {
+      max-height: 92dvh;
     }
     .panna-sheet-body {
       flex: 1;
       overflow-y: auto;
       min-height: 0;
     }
+    .panna-sheet-body-fill {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .panna-mobile-slide-editor {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0 16px 16px;
+    }
+    .panna-mobile-slide-textarea {
+      resize: none;
+    }
     .panna-mobile-slide-hint {
       flex-shrink: 0;
       text-align: center;
       padding: 6px 16px;
       font-size: 11px;
+      padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
     }
   }
 `;
