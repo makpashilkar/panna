@@ -90,6 +90,7 @@ export default function ControlsPanel({
   onSavePreset,
   onApplyPreset,
   onDeletePreset,
+  inSheet = false,
 }) {
   const showCustom = hasCustomOverrides(customOverrides);
   const [presetName, setPresetName] = useState("");
@@ -105,8 +106,8 @@ export default function ControlsPanel({
     <div
       style={{
         padding: "14px 20px",
-        borderBottom: `1px solid ${ui.border}`,
-        maxHeight: 340,
+        borderBottom: inSheet ? "none" : `1px solid ${ui.border}`,
+        maxHeight: inSheet ? "none" : 340,
         overflowY: "auto",
       }}
     >

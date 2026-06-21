@@ -9,9 +9,9 @@ This document explains how **Panna** (a browser-based carousel maker) is built, 
 **Panna** is a single-page web app (SPA) that helps small business owners create Instagram/LinkedIn carousel slides without design software.
 
 **User flow:**
-1. Type slide content in a thread-style editor (left panel on desktop, bottom on mobile).
-2. See live preview cards update instantly (right panel on desktop, top on mobile).
-3. Customize theme, colors, font, logo, and aspect ratio.
+1. Type slide content in a thread-style editor (left panel on desktop; bottom sheet on mobile).
+2. See live preview cards update instantly (right panel on desktop; main screen on mobile).
+3. Customize theme, colors, font, logo, and aspect ratio (controls panel on desktop; Settings sheet on mobile).
 4. Export all slides as high-resolution PNGs (ZIP or individual files).
 
 Everything runs **in the browser** — no server stores your carousel content.
@@ -72,6 +72,7 @@ flowchart LR
 | **JSZip** | ZIP file creation | Bundles multiple PNGs into one download |
 | **Google Fonts CDN** | Typography | Loads Inter, Playfair, etc. on demand |
 | **localStorage** | Client persistence | Saves UI mode, drafts, and theme presets without a backend |
+| **vite-plugin-pwa** | Installable web app | Web App Manifest + service worker for Add to Home Screen |
 | **Playwright** (dev only) | Smoke tests | Automated browser checks; not required for app runtime |
 
 **Deployment:** Static files (`npm run build` → `dist/`) hosted on Vercel/Netlify/GitHub Pages. No Node server needed in production.
@@ -82,30 +83,33 @@ flowchart LR
 
 ```
 Panna/
-├── index.html              # Entry HTML, loads html2canvas CDN
-├── vite.config.js          # Vite + React plugin config
-├── package.json            # Dependencies and scripts
+├── index.html              # Entry HTML, PWA meta tags, html2canvas CDN
+├── vite.config.js          # Vite + React + vite-plugin-pwa
+├── public/
+│   └── icons/              # PWA icons (icon.svg, icon-192.png, icon-512.png)
+├── package.json
 ├── src/
 │   ├── main.jsx            # React mount point
 │   ├── App.jsx             # Renders <Panna />
-│   ├── Panna.jsx           # Main app: state, layout, export
+│   ├── Panna.jsx           # State owner; picks Desktop vs Mobile layout
+│   ├── hooks/
+│   │   └── useMediaQuery.js # Detect viewport <= 768px
 │   ├── components/
-│   │   ├── SlideCard.jsx   # One carousel slide preview card
-│   │   ├── ControlsPanel.jsx # Theme, font, colors, presets UI
-│   │   └── AboutModal.jsx  # About dialog
-│   ├── constants/
-│   │   ├── themes.js       # 9 built-in color themes
-│   │   ├── fonts.js        # Font list + Google Fonts URLs
-│   │   ├── aspectRatios.js # 1:1, 4:5, 9:16 dimensions
-│   │   └── uiTokens.js     # App shell colors (dark/light mode)
-│   └── utils/
-│       ├── resolveTheme.js # Merge base theme + custom overrides
-│       ├── exportSlides.js # html2canvas + ZIP/PNG download
-│       ├── insertBullet.js # Insert "• " at cursor in textarea
-│       ├── draftStorage.js # Autosave carousel to localStorage
-│       └── themePresets.js # Save/load custom theme presets
-└── scripts/
-    └── smoke-test.mjs      # Playwright end-to-end smoke test
+│   │   ├── AppHeader.jsx   # Logo, Export, About, dark mode toggle
+│   │   ├── SlideThread.jsx # Slide textareas + add/remove
+│   │   ├── PreviewPanel.jsx # Preview strip + dot navigation
+│   │   ├── MobileToolbar.jsx # Settings / Slides toggle buttons
+│   │   ├── MobileBottomSheet.jsx # Collapsible panel wrapper
+│   │   ├── layout/
+│   │   │   ├── DesktopLayout.jsx  # Side-by-side editor + preview
+│   │   │   ├── MobileLayout.jsx   # Header + preview + sheets
+│   │   │   └── layoutStyles.js    # Shared CSS including mobile rules
+│   │   ├── SlideCard.jsx
+│   │   ├── ControlsPanel.jsx
+│   │   └── AboutModal.jsx
+│   ├── constants/          # themes, fonts, aspectRatios, uiTokens
+│   └── utils/              # resolveTheme, exportSlides, draftStorage, etc.
+└── scripts/smoke-test.mjs
 ```
 
 ---
@@ -114,6 +118,7 @@ Panna/
 
 ### `index.html`
 - Sets `<meta name="viewport">` for mobile browsers.
+- PWA meta tags: `theme-color`, `apple-mobile-web-app-capable`, apple touch icon.
 - Loads **html2canvas** from CDN (used at export time, not during normal editing).
 - Mounts React via `<script type="module" src="/src/main.jsx">`.
 
@@ -133,7 +138,7 @@ Thin wrapper that renders `<Panna />` — keeps entry point minimal.
 
 ## 6. Core State in `Panna.jsx`
 
-`Panna.jsx` is the brain of the app. It holds all carousel state:
+`Panna.jsx` is the **state owner** (~350 lines). It holds all carousel state and passes props to layout components:
 
 | State variable | Purpose |
 |----------------|---------|
@@ -148,6 +153,13 @@ Thin wrapper that renders `<Panna />` — keeps entry point minimal.
 | `uiMode` | App shell: `"dark"` or `"light"` |
 | `presets` | Saved custom theme presets from localStorage |
 | `activePresetId` | Which user preset is currently applied |
+| `mobileSheet` | Mobile only: `null`, `"settings"`, or `"slides"` |
+
+**Layout switch:**
+```javascript
+const isMobile = useMediaQuery("(max-width: 768px)");
+return isMobile ? <MobileLayout {...props} /> : <DesktopLayout {...props} />;
+```
 
 **Derived values (not stored separately):**
 - `resolvedTheme = resolveTheme(baseTheme, customOverrides)` — final colors for slides.
@@ -243,13 +255,9 @@ sequenceDiagram
 
 ---
 
-## 11. v3 Features (Mobile, Autosave, Presets)
+## 11. v3 Features (superseded mobile layout)
 
-### Mobile layout (CSS media query)
-At `max-width: 768px`:
-- Root uses `flex-direction: column-reverse` — preview (2nd in DOM) appears **on top**, editor **on bottom**.
-- Each panel gets `50vh` max height with `min-height: 0` so inner scroll works.
-- `100dvh` handles mobile browser address bar correctly.
+The first mobile attempt used `column-reverse` + 50/50 split. **Problem:** the bottom half had to fit header + ControlsPanel + textareas, leaving almost no room to type. Header also appeared mid-screen. v4 (below) replaces this.
 
 ### Draft autosave (`utils/draftStorage.js`)
 - **Key:** `panna-draft-v1`
@@ -321,14 +329,20 @@ At `max-width: 768px`:
 2. **"Export uses html2canvas at scaled resolution."**  
    Preview renders at 320px width; export scale = 1080/320 for Instagram-ready PNGs.
 
-3. **"I added responsive mobile layout with CSS flexbox."**  
-   `column-reverse` + 50vh split; no JavaScript breakpoint detection needed.
+3. **"I redesigned mobile with preview-first layout and bottom sheets."**  
+   Settings and slide editor are hidden by default; user opens them via toolbar. Header stays at top of app.
 
 4. **"Draft autosave uses debounced localStorage with quota handling."**  
    Shows awareness of browser limits and UX (restore on refresh).
 
 5. **"Theme presets are a separate persistence layer from drafts."**  
    Reusable brand themes vs. one-off carousel content — clean data separation.
+
+6. **"Refactored into layout components while keeping one state owner."**  
+   `Panna.jsx` owns state; `DesktopLayout` / `MobileLayout` only arrange UI.
+
+7. **"Added PWA support for Add to Home Screen."**  
+   `vite-plugin-pwa` generates manifest + service worker; app opens standalone like a native shell.
 
 ---
 
@@ -346,10 +360,118 @@ These are product choices documented in `PRD.md` — good to mention when discus
 
 1. Run `npm run dev`, edit a slide, watch preview update — trace the data flow in DevTools React extension.
 2. Change a theme color — follow `customOverrides` → `resolveTheme` → `SlideCard` style.
-3. Resize browser below 768px — inspect flex layout in DevTools.
+3. Resize browser below 768px — tap **Settings** and **Slides** toolbar buttons; trace `mobileSheet` state.
 4. Export a carousel — set breakpoint in `exportSlides.js` and log `scale`.
 5. Read `localStorage` in DevTools → Application tab → see `panna-draft-v1` after typing.
+6. On phone: Share → Add to Home Screen; open installed app and confirm standalone mode.
 
 ---
 
-*Last updated for Panna v3 (mobile layout, draft autosave, theme presets) on branch `feature/mobile-split-layout`.*
+## 18. Mobile v4 layout (bottom sheets)
+
+```mermaid
+flowchart TB
+  header[AppHeader top]
+  preview[PreviewPanel flex 1]
+  hint[Slide N of M hint]
+  toolbar[MobileToolbar]
+  sheet[MobileBottomSheet optional]
+  header --> preview
+  preview --> hint
+  hint --> toolbar
+  toolbar --> sheet
+```
+
+At `max-width: 768px`, [`MobileLayout.jsx`](src/components/layout/MobileLayout.jsx) renders:
+
+1. **AppHeader** — always at top (Export, About, logo).
+2. **PreviewPanel** — takes remaining vertical space (`flex: 1`).
+3. **Slide hint** — "Slide 2 of 5 · Tap Slides to edit" when no sheet is open.
+4. **MobileToolbar** — **Settings** | **Slides** buttons.
+5. **MobileBottomSheet** — only when `mobileSheet === "settings"` or `"slides"`.
+
+**Trace: user taps Slides**
+1. `MobileToolbar` calls `onToggleSheet("slides")` in `Panna.jsx`.
+2. `mobileSheet` becomes `"slides"` (tap again → `null` to close).
+3. `MobileBottomSheet` renders with `SlideThread` inside (full sheet height for typing).
+4. User types → `updateSlide` in `Panna.jsx` → `slides` state updates → `PreviewPanel` re-renders `SlideCard`.
+
+**Trace: user taps Settings**
+1. Same toggle pattern with `"settings"`.
+2. Sheet body renders `ControlsPanel` with `inSheet={true}` (no 340px max height).
+3. User picks accent color → `customOverrides` → `resolveTheme` → preview updates.
+
+CSS lives in [`layoutStyles.js`](src/components/layout/layoutStyles.js). Body scroll is locked while a sheet is open (`useEffect` in `MobileLayout.jsx`).
+
+---
+
+## 19. Component architecture
+
+| Component | Owns state? | Role |
+|-----------|-------------|------|
+| `Panna.jsx` | Yes — all app state | Handlers, draft save, layout switch |
+| `DesktopLayout` | No | Composes header + controls + slides + preview side-by-side |
+| `MobileLayout` | No | Composes header + preview + toolbar + sheets |
+| `AppHeader` | No | Logo, Export, About, theme toggle |
+| `SlideThread` | No | Slide textareas; receives callbacks from parent |
+| `PreviewPanel` | No | Preview cards + dot nav |
+| `ControlsPanel` | No | Theme/font/color UI |
+| `SlideCard` | No | One slide preview card (display only) |
+
+**Rule:** State lives in one place (`Panna.jsx`). Child components receive **props** and call **callbacks** (`onThemeSelect`, `updateSlide`, etc.). This is called **lifting state up** — a core React pattern.
+
+**Why two layouts?** Desktop and mobile need different DOM structure, but the same data. Splitting layouts avoids `if (isMobile)` scattered through 700 lines.
+
+---
+
+## 20. End-to-end trace cheat sheet
+
+| # | User action | Path through code |
+|---|-------------|-------------------|
+| 1 | Type in slide textarea | `SlideThread` → `updateSlide(id, text)` → `setSlides` → `SlideCard` re-renders |
+| 2 | Change accent color | `ControlsPanel` → `onCustomAccent` → `customOverrides` → `resolveTheme` → `SlideCard` style |
+| 3 | Save theme preset | `ControlsPanel` → `handleSavePreset` → `themePresets.js` → `localStorage` |
+| 4 | Export ZIP | `AppHeader` → `handleExport` → `exportSlides.js` → html2canvas → JSZip → download |
+| 5 | Open Settings (mobile) | `MobileToolbar` → `toggleMobileSheet("settings")` → `MobileBottomSheet` → `ControlsPanel` |
+| 6 | Install PWA | Browser reads `manifest.webmanifest` → Add to Home Screen → opens with `display: standalone` |
+
+---
+
+## 21. PWA (installable web app)
+
+**Files involved:**
+- [`vite.config.js`](vite.config.js) — `vite-plugin-pwa` plugin config
+- [`public/icons/`](public/icons/) — app icons for home screen
+- [`index.html`](index.html) — `theme-color`, `apple-mobile-web-app-*` meta tags
+- Build output: `dist/manifest.webmanifest`, `dist/sw.js`, `dist/registerSW.js`
+
+**Concepts:**
+- **Web App Manifest** — JSON describing app name, icons, colors, and `display: standalone` (hides browser URL bar).
+- **Service worker** — Background script that caches static assets for faster load and limited offline use.
+- **Add to Home Screen** — On Android Chrome: menu → Install app. On iOS Safari: Share → Add to Home Screen.
+
+**Limitations:** html2canvas loads from CDN; first export may need network unless cached. Carousel data stays in localStorage, not on a server.
+
+**How to test:**
+1. `npm run build && npm run preview`
+2. Chrome DevTools → Application → Manifest (check icons and standalone)
+3. On phone over HTTPS (Vercel deploy): use browser install prompt or iOS Add to Home Screen
+
+---
+
+## 22. Extended glossary
+
+| Term | Meaning |
+|------|---------|
+| **Bottom sheet** | Panel that slides up from the bottom of the screen (common mobile UI pattern) |
+| **Backdrop** | Semi-transparent overlay behind a sheet; tap to dismiss |
+| **Lifting state up** | Keeping shared data in a parent component, passing it down as props |
+| **Controlled component** | Input whose value comes from React state, not the DOM alone |
+| **Service worker** | Script registered by the browser to cache files and enable offline features |
+| **Web App Manifest** | JSON file telling the OS how to install and display the web app |
+| **display: standalone** | Opens the app without browser chrome, like a native app shell |
+| **useMediaQuery** | React hook wrapping `window.matchMedia` to react to screen size changes |
+
+---
+
+*Last updated for Panna v4 (mobile bottom sheets, component split, PWA) on branch `feature/mobile-split-layout`.*

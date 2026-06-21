@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import SlideCard from "./components/SlideCard.jsx";
-import ControlsPanel from "./components/ControlsPanel.jsx";
 import AboutModal from "./components/AboutModal.jsx";
+import DesktopLayout from "./components/layout/DesktopLayout.jsx";
+import MobileLayout from "./components/layout/MobileLayout.jsx";
+import { LAYOUT_STYLES } from "./components/layout/layoutStyles.js";
 import { getThemeById } from "./constants/themes.js";
 import { ASPECT_RATIOS } from "./constants/aspectRatios.js";
 import { getFontById, getFontImportUrl } from "./constants/fonts.js";
@@ -11,6 +12,7 @@ import { exportSlides } from "./utils/exportSlides.js";
 import { insertBulletAtCursor } from "./utils/insertBullet.js";
 import { loadDraft, saveDraft } from "./utils/draftStorage.js";
 import { loadPresets, savePreset, deletePreset } from "./utils/themePresets.js";
+import { useMediaQuery, MOBILE_QUERY } from "./hooks/useMediaQuery.js";
 
 const MAX_SLIDES = 20;
 
@@ -49,6 +51,7 @@ export default function Panna() {
   const [presets, setPresets] = useState(() => loadPresets());
   const [activePresetId, setActivePresetId] = useState(() => loadDraft()?.activePresetId ?? null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [mobileSheet, setMobileSheet] = useState(null);
 
   const textareaRefs = useRef({});
   const previewRef = useRef(null);
@@ -56,6 +59,7 @@ export default function Panna() {
   const logoInputRef = useRef(null);
   const skipDraftSave = useRef(true);
 
+  const isMobile = useMediaQuery(MOBILE_QUERY);
   const ui = getUiTokens(uiMode);
   const baseTheme = getThemeById(themeId);
   const resolvedTheme = useMemo(
@@ -267,7 +271,114 @@ export default function Panna() {
     }
   };
 
+  const toggleMobileSheet = (sheet) => {
+    setMobileSheet((prev) => (prev === sheet ? null : sheet));
+  };
+
   const atMaxSlides = slides.length >= MAX_SLIDES;
+
+  const headerProps = {
+    ui,
+    draftSaved,
+    uiMode,
+    onUiModeToggle: () => setUiMode((m) => (m === "dark" ? "light" : "dark")),
+    onAboutOpen: () => setAboutOpen(true),
+    onExport: handleExport,
+    exporting,
+    exportMsg,
+  };
+
+  const controlsPanelProps = {
+    ui,
+    themeId,
+    onThemeSelect: handleThemeSelect,
+    customOverrides,
+    onCustomBg: (v) => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, bg: v }));
+    },
+    onCustomCardBg: (v) => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, cardBg: v }));
+    },
+    onCustomAccent: (v) => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, accent: v }));
+    },
+    onCustomText: (v) => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, text: v }));
+    },
+    onResetBg: () => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, bg: null }));
+    },
+    onResetCardBg: () => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, cardBg: null }));
+    },
+    onResetAccent: () => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, accent: null }));
+    },
+    onResetText: () => {
+      clearActivePreset();
+      setCustomOverrides((o) => ({ ...o, text: null }));
+    },
+    ratio,
+    onRatioChange: setRatio,
+    fontId,
+    onFontChange: setFontId,
+    logo,
+    onLogoUpload: handleLogoUpload,
+    onLogoRemove: () => setLogo(null),
+    logoInputRef,
+    exportFormat,
+    onExportFormatChange: setExportFormat,
+    resolvedTheme,
+    presets,
+    activePresetId,
+    onSavePreset: handleSavePreset,
+    onApplyPreset: handleApplyPreset,
+    onDeletePreset: handleDeletePreset,
+  };
+
+  const slideThreadProps = {
+    ui,
+    slides,
+    activeSlide,
+    resolvedTheme,
+    atMaxSlides,
+    textareaRefs,
+    goToSlide,
+    updateSlide,
+    handleKeyDown,
+    handleInsertBullet,
+    removeSlide,
+    addSlide,
+  };
+
+  const previewPanelProps = {
+    ui,
+    slides,
+    activeSlide,
+    resolvedTheme,
+    ratio,
+    ratioObj,
+    logo,
+    fontFamily: font.family,
+    previewRef,
+    slidePreviewRefs,
+    goToSlide,
+  };
+
+  const layoutProps = {
+    ui,
+    headerProps,
+    controlsPanelProps,
+    slideThreadProps,
+    previewPanelProps,
+  };
 
   return (
     <div
@@ -283,477 +394,19 @@ export default function Panna() {
         "--panna-border": ui.border,
       }}
     >
-      <style>{`
-        * { box-sizing: border-box; margin: 0; }
-        html, body, #root { height: 100%; }
-        textarea { resize: none; outline: none; border: none; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-        .slide-thread:hover .slide-actions { opacity: 1 !important; }
-        @media (max-width: 768px) {
-          .panna-root {
-            flex-direction: column-reverse;
-            height: 100dvh;
-            min-height: 100dvh;
-          }
-          .panna-editor-panel {
-            width: 100% !important;
-            min-width: 0 !important;
-            flex: 1 1 50%;
-            max-height: 50vh;
-            border-right: none !important;
-            border-top: 1px solid var(--panna-border, #222);
-          }
-          .panna-preview-panel {
-            flex: 1 1 50%;
-            max-height: 50vh;
-            min-height: 0;
-          }
-          .panna-preview-scroll {
-            padding: 16px !important;
-          }
-          .panna-editor-header {
-            flex-wrap: wrap;
-          }
-          .panna-preview-footer-hint {
-            display: none;
-          }
-        }
-      `}</style>
-
+      <style>{LAYOUT_STYLES}</style>
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} ui={ui} />
-
-      {/* LEFT PANEL */}
-      <div
-        className="panna-editor-panel"
-        style={{
-          width: 380,
-          minWidth: 320,
-          display: "flex",
-          flexDirection: "column",
-          borderRight: `1px solid ${ui.border}`,
-          background: ui.panelBg,
-        }}
-      >
-        {/* Header */}
-        <div
-          className="panna-editor-header"
-          style={{
-            padding: "18px 20px 14px",
-            borderBottom: `1px solid ${ui.border}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span
-              style={{
-                fontSize: 18,
-                fontWeight: 600,
-                letterSpacing: "-0.5px",
-                color: ui.text,
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-              }}
-            >
-              panna
-            </span>
-            <span style={{ fontSize: 11, color: ui.textDim }}>carousel maker</span>
-            {draftSaved && (
-              <span style={{ fontSize: 10, color: ui.textMuted, marginTop: 2 }}>Draft saved</span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              onClick={() => setAboutOpen(true)}
-              style={{
-                background: "transparent",
-                border: `1px solid ${ui.inputBorder}`,
-                borderRadius: 8,
-                padding: "6px 10px",
-                fontSize: 12,
-                color: ui.textFaint,
-                cursor: "pointer",
-              }}
-            >
-              About
-            </button>
-            <button
-              onClick={() => setUiMode((m) => (m === "dark" ? "light" : "dark"))}
-              title={uiMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              style={{
-                background: "transparent",
-                border: `1px solid ${ui.inputBorder}`,
-                borderRadius: 8,
-                padding: "6px 8px",
-                fontSize: 14,
-                cursor: "pointer",
-                lineHeight: 1,
-                color: ui.textFaint,
-              }}
-            >
-              {uiMode === "dark" ? "☀" : "☾"}
-            </button>
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              style={{
-                background: ui.accent,
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                padding: "7px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: exporting ? "not-allowed" : "pointer",
-                opacity: exporting ? 0.7 : 1,
-                whiteSpace: "nowrap",
-                minWidth: 120,
-                textAlign: "center",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {exporting || exportMsg ? exportMsg || "Exporting..." : "Export"}
-            </button>
-          </div>
-        </div>
-
-        <ControlsPanel
-          ui={ui}
-          themeId={themeId}
-          onThemeSelect={handleThemeSelect}
-          customOverrides={customOverrides}
-          onCustomBg={(v) => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, bg: v }));
-          }}
-          onCustomCardBg={(v) => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, cardBg: v }));
-          }}
-          onCustomAccent={(v) => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, accent: v }));
-          }}
-          onCustomText={(v) => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, text: v }));
-          }}
-          onResetBg={() => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, bg: null }));
-          }}
-          onResetCardBg={() => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, cardBg: null }));
-          }}
-          onResetAccent={() => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, accent: null }));
-          }}
-          onResetText={() => {
-            clearActivePreset();
-            setCustomOverrides((o) => ({ ...o, text: null }));
-          }}
-          ratio={ratio}
-          onRatioChange={setRatio}
-          fontId={fontId}
-          onFontChange={setFontId}
-          logo={logo}
-          onLogoUpload={handleLogoUpload}
-          onLogoRemove={() => setLogo(null)}
-          logoInputRef={logoInputRef}
-          exportFormat={exportFormat}
-          onExportFormatChange={setExportFormat}
-          resolvedTheme={resolvedTheme}
-          presets={presets}
-          activePresetId={activePresetId}
-          onSavePreset={handleSavePreset}
-          onApplyPreset={handleApplyPreset}
-          onDeletePreset={handleDeletePreset}
+      {isMobile ? (
+        <MobileLayout
+          {...layoutProps}
+          mobileSheet={mobileSheet}
+          onToggleSheet={toggleMobileSheet}
+          activeSlide={activeSlide}
+          slideCount={slides.length}
         />
-
-        {/* Slide thread */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}
-          >
-            <p
-              style={{
-                fontSize: 11,
-                color: ui.textMuted,
-                margin: 0,
-                fontWeight: 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Slides · {slides.length}
-              {atMaxSlides ? " (max)" : ""}
-            </p>
-            <span style={{ fontSize: 10, color: ui.textDim }}>⌘↵ new slide</span>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {slides.map((slide, index) => (
-              <div
-                key={slide.id}
-                className="slide-thread"
-                style={{ display: "flex", position: "relative" }}
-                onClick={() => goToSlide(index)}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    width: 24,
-                    flexShrink: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: activeSlide === index ? resolvedTheme.accent : ui.inputBorder,
-                      marginTop: 16,
-                      flexShrink: 0,
-                    }}
-                  />
-                  {index < slides.length - 1 && (
-                    <div
-                      style={{ width: 1, flex: 1, background: ui.railLine, minHeight: 12 }}
-                    />
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    background: activeSlide === index ? ui.inputBg : "transparent",
-                    borderRadius: 10,
-                    padding: "10px 12px",
-                    marginBottom: 4,
-                    border: `1px solid ${activeSlide === index ? ui.inputBorder : "transparent"}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <span style={{ fontSize: 10, color: ui.textDim, marginBottom: 4, display: "block" }}>
-                      Slide {index + 1}
-                    </span>
-                    <div
-                      className="slide-actions"
-                      style={{ opacity: 0, transition: "opacity 0.15s", display: "flex", gap: 4 }}
-                    >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInsertBullet(slide);
-                        }}
-                        style={{
-                          background: "none",
-                          border: `1px solid ${ui.inputBorder}`,
-                          borderRadius: 4,
-                          color: ui.textFaint,
-                          cursor: "pointer",
-                          fontSize: 10,
-                          padding: "1px 6px",
-                        }}
-                        title="Insert bullet"
-                      >
-                        • Bullet
-                      </button>
-                      {slides.length > 1 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeSlide(index);
-                          }}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: ui.textFaint,
-                            cursor: "pointer",
-                            fontSize: 16,
-                            lineHeight: 1,
-                          }}
-                          title="Remove slide"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <textarea
-                    ref={(el) => {
-                      if (el) textareaRefs.current[slide.id] = el;
-                    }}
-                    value={slide.text}
-                    placeholder={
-                      index === 0
-                        ? "New arrivals this week — type one line per bullet..."
-                        : "Add content for this slide..."
-                    }
-                    onChange={(e) => updateSlide(slide.id, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e, slide, index)}
-                    onFocus={() => goToSlide(index)}
-                    rows={3}
-                    style={{
-                      width: "100%",
-                      background: "transparent",
-                      color: ui.inputText,
-                      fontSize: 13,
-                      lineHeight: 1.6,
-                      fontFamily: "system-ui, sans-serif",
-                      caretColor: resolvedTheme.accent,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {!atMaxSlides && (
-            <button
-              onClick={() => addSlide(slides.length - 1)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 8,
-                marginLeft: 24,
-                background: "transparent",
-                border: `1px dashed ${ui.inputBorder}`,
-                borderRadius: 8,
-                padding: "8px 12px",
-                color: ui.textFaint,
-                fontSize: 12,
-                cursor: "pointer",
-                width: "calc(100% - 24px)",
-              }}
-            >
-              + Add slide
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT PANEL — preview stays dark-neutral */}
-      <div
-        className="panna-preview-panel"
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          background: ui.previewShellBg,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            padding: "18px 24px 14px",
-            borderBottom: `1px solid ${ui.borderSubtle}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span style={{ fontSize: 12, color: ui.textFaint, fontWeight: 500 }}>
-            Preview · {slides.length} slide{slides.length !== 1 ? "s" : ""}
-          </span>
-          <div style={{ display: "flex", gap: 6 }}>
-            {slides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => goToSlide(i)}
-                style={{
-                  width: i === activeSlide ? 20 : 6,
-                  height: 6,
-                  borderRadius: 3,
-                  background: i === activeSlide ? resolvedTheme.accent : ui.hoverBg,
-                  border: "none",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                  padding: 0,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div
-          ref={previewRef}
-          className="panna-preview-scroll"
-          style={{
-            flex: 1,
-            overflow: "auto",
-            padding: 32,
-            display: "flex",
-            gap: 20,
-            alignItems: "flex-start",
-          }}
-        >
-          {slides.map((slide, index) => (
-            <div
-              key={slide.id}
-              className="export-card"
-              ref={(el) => {
-                slidePreviewRefs.current[index] = el;
-              }}
-              onClick={() => goToSlide(index)}
-              style={{
-                cursor: "pointer",
-                outline:
-                  activeSlide === index
-                    ? `2px solid ${resolvedTheme.accent}`
-                    : "2px solid transparent",
-                borderRadius: 18,
-                flexShrink: 0,
-              }}
-            >
-              <SlideCard
-                slide={slide}
-                theme={resolvedTheme}
-                ratioId={ratio}
-                logo={logo}
-                fontFamily={font.family}
-              />
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            padding: "10px 24px",
-            borderTop: `1px solid ${ui.borderSubtle}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span style={{ fontSize: 11, color: ui.previewHint }}>
-            {ratioObj.w}×{ratioObj.h}px · {ratioObj.subtitle} · High-res PNG export
-          </span>
-          <span className="panna-preview-footer-hint" style={{ fontSize: 11, color: ui.previewHint }}>
-            Scroll to see all slides →
-          </span>
-        </div>
-      </div>
+      ) : (
+        <DesktopLayout {...layoutProps} />
+      )}
     </div>
   );
 }
