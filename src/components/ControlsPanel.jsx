@@ -2,6 +2,7 @@ import { THEMES } from "../constants/themes.js";
 import { ASPECT_RATIOS } from "../constants/aspectRatios.js";
 import { FONTS } from "../constants/fonts.js";
 import { hasCustomOverrides } from "../utils/resolveTheme.js";
+import { useState } from "react";
 
 function SectionLabel({ children, ui }) {
   return (
@@ -84,8 +85,21 @@ export default function ControlsPanel({
   exportFormat,
   onExportFormatChange,
   resolvedTheme,
+  presets,
+  activePresetId,
+  onSavePreset,
+  onApplyPreset,
+  onDeletePreset,
 }) {
   const showCustom = hasCustomOverrides(customOverrides);
+  const [presetName, setPresetName] = useState("");
+
+  const handleSavePresetClick = () => {
+    const name = presetName.trim();
+    if (!name) return;
+    onSavePreset(name);
+    setPresetName("");
+  };
 
   return (
     <div
@@ -109,13 +123,13 @@ export default function ControlsPanel({
               alignItems: "center",
               gap: 6,
               background: "transparent",
-              border: `1px solid ${themeId === t.id && !showCustom ? ui.accent : ui.inputBorder}`,
+              border: `1px solid ${themeId === t.id && !showCustom && !activePresetId ? ui.accent : ui.inputBorder}`,
               borderRadius: 6,
               padding: "5px 10px",
               cursor: "pointer",
-              color: themeId === t.id && !showCustom ? ui.accent : ui.textFaint,
+              color: themeId === t.id && !showCustom && !activePresetId ? ui.accent : ui.textFaint,
               fontSize: 12,
-              fontWeight: themeId === t.id && !showCustom ? 600 : 400,
+              fontWeight: themeId === t.id && !showCustom && !activePresetId ? 600 : 400,
             }}
           >
             <div
@@ -131,6 +145,96 @@ export default function ControlsPanel({
           </button>
         ))}
       </div>
+
+      <SectionLabel ui={ui}>My Themes</SectionLabel>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        <input
+          type="text"
+          value={presetName}
+          onChange={(e) => setPresetName(e.target.value)}
+          placeholder="Theme name"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSavePresetClick();
+          }}
+          style={{
+            flex: 1,
+            padding: "6px 10px",
+            borderRadius: 6,
+            border: `1px solid ${ui.inputBorder}`,
+            background: ui.inputBg,
+            color: ui.inputText,
+            fontSize: 12,
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleSavePresetClick}
+          disabled={!presetName.trim()}
+          style={{
+            background: ui.hoverBg,
+            border: `1px solid ${ui.inputBorder}`,
+            borderRadius: 6,
+            padding: "6px 12px",
+            fontSize: 12,
+            color: presetName.trim() ? ui.accent : ui.textDim,
+            cursor: presetName.trim() ? "pointer" : "not-allowed",
+            fontWeight: 600,
+          }}
+        >
+          Save
+        </button>
+      </div>
+      {presets.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {presets.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => onApplyPreset(preset)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                background: activePresetId === preset.id ? ui.hoverBg : "transparent",
+                border: `1px solid ${activePresetId === preset.id ? ui.accent : ui.inputBorder}`,
+                borderRadius: 6,
+                padding: "4px 8px 4px 10px",
+                cursor: "pointer",
+                color: activePresetId === preset.id ? ui.accent : ui.textFaint,
+                fontSize: 12,
+                fontWeight: activePresetId === preset.id ? 600 : 400,
+              }}
+            >
+              {preset.name}
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeletePreset(preset.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onDeletePreset(preset.id);
+                  }
+                }}
+                style={{
+                  color: ui.textMuted,
+                  fontSize: 14,
+                  lineHeight: 1,
+                  padding: "0 2px",
+                }}
+                title="Delete preset"
+              >
+                ×
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {presets.length === 0 && <div style={{ marginBottom: 14 }} />}
 
       <SectionLabel ui={ui}>Aspect Ratio</SectionLabel>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>

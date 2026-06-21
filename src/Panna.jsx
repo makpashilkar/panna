@@ -9,6 +9,8 @@ import { getUiTokens, UI_MODE_KEY } from "./constants/uiTokens.js";
 import { resolveTheme } from "./utils/resolveTheme.js";
 import { exportSlides } from "./utils/exportSlides.js";
 import { insertBulletAtCursor } from "./utils/insertBullet.js";
+import { loadDraft, saveDraft } from "./utils/draftStorage.js";
+import { loadPresets, savePreset, deletePreset } from "./utils/themePresets.js";
 
 const MAX_SLIDES = 20;
 
@@ -25,29 +27,34 @@ function readUiMode() {
   }
 }
 
+const DEFAULT_OVERRIDES = { bg: null, cardBg: null, accent: null, text: null };
+
 export default function Panna() {
-  const [slides, setSlides] = useState([{ id: generateId(), text: "", index: 0 }]);
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [themeId, setThemeId] = useState("midnight");
-  const [customOverrides, setCustomOverrides] = useState({
-    bg: null,
-    cardBg: null,
-    accent: null,
-    text: null,
-  });
-  const [ratio, setRatio] = useState("1:1");
-  const [fontId, setFontId] = useState("georgia");
-  const [logo, setLogo] = useState(null);
-  const [exportFormat, setExportFormat] = useState("zip");
+  const [slides, setSlides] = useState(
+    () => loadDraft()?.slides ?? [{ id: generateId(), text: "", index: 0 }]
+  );
+  const [activeSlide, setActiveSlide] = useState(() => loadDraft()?.activeSlide ?? 0);
+  const [themeId, setThemeId] = useState(() => loadDraft()?.themeId ?? "midnight");
+  const [customOverrides, setCustomOverrides] = useState(
+    () => loadDraft()?.customOverrides ?? DEFAULT_OVERRIDES
+  );
+  const [ratio, setRatio] = useState(() => loadDraft()?.ratio ?? "1:1");
+  const [fontId, setFontId] = useState(() => loadDraft()?.fontId ?? "georgia");
+  const [logo, setLogo] = useState(() => loadDraft()?.logo ?? null);
+  const [exportFormat, setExportFormat] = useState(() => loadDraft()?.exportFormat ?? "zip");
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState("");
   const [uiMode, setUiMode] = useState(readUiMode);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [presets, setPresets] = useState(() => loadPresets());
+  const [activePresetId, setActivePresetId] = useState(() => loadDraft()?.activePresetId ?? null);
+  const [draftSaved, setDraftSaved] = useState(false);
 
   const textareaRefs = useRef({});
   const previewRef = useRef(null);
   const slidePreviewRefs = useRef({});
   const logoInputRef = useRef(null);
+  const skipDraftSave = useRef(true);
 
   const ui = getUiTokens(uiMode);
   const baseTheme = getThemeById(themeId);
@@ -85,6 +92,39 @@ export default function Panna() {
   useEffect(() => {
     setSlides((prev) => prev.map((s, i) => ({ ...s, index: i })));
   }, [slides.length]);
+
+  useEffect(() => {
+    skipDraftSave.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (skipDraftSave.current) return;
+    const timer = setTimeout(() => {
+      const ok = saveDraft({
+        slides,
+        activeSlide,
+        themeId,
+        customOverrides,
+        ratio,
+        fontId,
+        logo,
+        exportFormat,
+        activePresetId,
+      });
+      setDraftSaved(ok);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    slides,
+    activeSlide,
+    themeId,
+    customOverrides,
+    ratio,
+    fontId,
+    logo,
+    exportFormat,
+    activePresetId,
+  ]);
 
   const updateSlide = useCallback((id, text) => {
     setSlides((prev) => prev.map((s) => (s.id === id ? { ...s, text } : s)));
@@ -141,7 +181,37 @@ export default function Panna() {
 
   const handleThemeSelect = (id) => {
     setThemeId(id);
-    setCustomOverrides({ bg: null, cardBg: null, accent: null, text: null });
+    setCustomOverrides(DEFAULT_OVERRIDES);
+    setActivePresetId(null);
+  };
+
+  const clearActivePreset = () => setActivePresetId(null);
+
+  const handleSavePreset = (name) => {
+    const preset = savePreset({
+      id: generateId(),
+      name,
+      themeId,
+      customOverrides,
+      fontId,
+      createdAt: new Date().toISOString(),
+    });
+    if (preset) {
+      setPresets(loadPresets());
+      setActivePresetId(preset.id);
+    }
+  };
+
+  const handleApplyPreset = (preset) => {
+    setThemeId(preset.themeId);
+    setCustomOverrides(preset.customOverrides ?? DEFAULT_OVERRIDES);
+    setFontId(preset.fontId);
+    setActivePresetId(preset.id);
+  };
+
+  const handleDeletePreset = (id) => {
+    setPresets(deletePreset(id));
+    if (activePresetId === id) setActivePresetId(null);
   };
 
   const goToSlide = useCallback((index) => {
@@ -201,6 +271,7 @@ export default function Panna() {
 
   return (
     <div
+      className="panna-root"
       style={{
         display: "flex",
         height: "100vh",
@@ -209,6 +280,7 @@ export default function Panna() {
         background: ui.shellBg,
         color: ui.text,
         overflow: "hidden",
+        "--panna-border": ui.border,
       }}
     >
       <style>{`
@@ -219,12 +291,42 @@ export default function Panna() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
         .slide-thread:hover .slide-actions { opacity: 1 !important; }
+        @media (max-width: 768px) {
+          .panna-root {
+            flex-direction: column-reverse;
+            height: 100dvh;
+            min-height: 100dvh;
+          }
+          .panna-editor-panel {
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 50%;
+            max-height: 50vh;
+            border-right: none !important;
+            border-top: 1px solid var(--panna-border, #222);
+          }
+          .panna-preview-panel {
+            flex: 1 1 50%;
+            max-height: 50vh;
+            min-height: 0;
+          }
+          .panna-preview-scroll {
+            padding: 16px !important;
+          }
+          .panna-editor-header {
+            flex-wrap: wrap;
+          }
+          .panna-preview-footer-hint {
+            display: none;
+          }
+        }
       `}</style>
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} ui={ui} />
 
       {/* LEFT PANEL */}
       <div
+        className="panna-editor-panel"
         style={{
           width: 380,
           minWidth: 320,
@@ -236,6 +338,7 @@ export default function Panna() {
       >
         {/* Header */}
         <div
+          className="panna-editor-header"
           style={{
             padding: "18px 20px 14px",
             borderBottom: `1px solid ${ui.border}`,
@@ -258,6 +361,9 @@ export default function Panna() {
               panna
             </span>
             <span style={{ fontSize: 11, color: ui.textDim }}>carousel maker</span>
+            {draftSaved && (
+              <span style={{ fontSize: 10, color: ui.textMuted, marginTop: 2 }}>Draft saved</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button
@@ -320,14 +426,38 @@ export default function Panna() {
           themeId={themeId}
           onThemeSelect={handleThemeSelect}
           customOverrides={customOverrides}
-          onCustomBg={(v) => setCustomOverrides((o) => ({ ...o, bg: v }))}
-          onCustomCardBg={(v) => setCustomOverrides((o) => ({ ...o, cardBg: v }))}
-          onCustomAccent={(v) => setCustomOverrides((o) => ({ ...o, accent: v }))}
-          onCustomText={(v) => setCustomOverrides((o) => ({ ...o, text: v }))}
-          onResetBg={() => setCustomOverrides((o) => ({ ...o, bg: null }))}
-          onResetCardBg={() => setCustomOverrides((o) => ({ ...o, cardBg: null }))}
-          onResetAccent={() => setCustomOverrides((o) => ({ ...o, accent: null }))}
-          onResetText={() => setCustomOverrides((o) => ({ ...o, text: null }))}
+          onCustomBg={(v) => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, bg: v }));
+          }}
+          onCustomCardBg={(v) => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, cardBg: v }));
+          }}
+          onCustomAccent={(v) => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, accent: v }));
+          }}
+          onCustomText={(v) => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, text: v }));
+          }}
+          onResetBg={() => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, bg: null }));
+          }}
+          onResetCardBg={() => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, cardBg: null }));
+          }}
+          onResetAccent={() => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, accent: null }));
+          }}
+          onResetText={() => {
+            clearActivePreset();
+            setCustomOverrides((o) => ({ ...o, text: null }));
+          }}
           ratio={ratio}
           onRatioChange={setRatio}
           fontId={fontId}
@@ -339,6 +469,11 @@ export default function Panna() {
           exportFormat={exportFormat}
           onExportFormatChange={setExportFormat}
           resolvedTheme={resolvedTheme}
+          presets={presets}
+          activePresetId={activePresetId}
+          onSavePreset={handleSavePreset}
+          onApplyPreset={handleApplyPreset}
+          onDeletePreset={handleDeletePreset}
         />
 
         {/* Slide thread */}
@@ -520,6 +655,7 @@ export default function Panna() {
 
       {/* RIGHT PANEL — preview stays dark-neutral */}
       <div
+        className="panna-preview-panel"
         style={{
           flex: 1,
           display: "flex",
@@ -562,6 +698,7 @@ export default function Panna() {
 
         <div
           ref={previewRef}
+          className="panna-preview-scroll"
           style={{
             flex: 1,
             overflow: "auto",
@@ -612,7 +749,9 @@ export default function Panna() {
           <span style={{ fontSize: 11, color: ui.previewHint }}>
             {ratioObj.w}×{ratioObj.h}px · {ratioObj.subtitle} · High-res PNG export
           </span>
-          <span style={{ fontSize: 11, color: ui.previewHint }}>Scroll to see all slides →</span>
+          <span className="panna-preview-footer-hint" style={{ fontSize: 11, color: ui.previewHint }}>
+            Scroll to see all slides →
+          </span>
         </div>
       </div>
     </div>
